@@ -51,6 +51,8 @@ import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toDpRect
+import androidx.compose.ui.uikit.utils.CMPLayoutRegion
+import androidx.compose.ui.uikit.utils.CMPLayoutRegionAdaptivityAxisVertical
 import androidx.compose.ui.viewinterop.UIKitView
 import androidx.compose.ui.window.ComposeUIView
 import kotlin.test.Test
@@ -62,6 +64,8 @@ import platform.UIKit.UIInterfaceOrientationLandscapeLeft
 import platform.UIKit.UIInterfaceOrientationLandscapeRight
 import platform.UIKit.UIInterfaceOrientationPortrait
 import platform.UIKit.UIInterfaceOrientationPortraitUpsideDown
+import platform.UIKit.UIModalPresentationPageSheet
+import platform.UIKit.UIViewController
 
 class WindowInsetsPaddingTest {
     @Test
@@ -299,6 +303,51 @@ class WindowInsetsPaddingTest {
             ),
             innerBoxRect
         )
+    }
+
+    @OptIn(ExperimentalForeignApi::class)
+    @Test
+    fun testWindowInsetsPaddingInPageSheetMatchesSheetSafeArea() = runUIKitInstrumentedTest {
+        var contentRect = DpRectZero()
+        var paddedRect = DpRectZero()
+
+        val rootViewController = UIViewController()
+        setupWindow { rootViewController }
+
+        waitUntil("root view controller should be attached before presenting the sheet") {
+            rootViewController.view.window != null
+        }
+
+        val sheetViewController = createViewControllerHostingCompose {
+            Box(modifier = Modifier
+                .fillMaxSize()
+                .onGloballyPositioned { contentRect = it.boundsInWindow().toDpRect(density) }
+            ) {
+                Box(modifier = Modifier
+                    .fillMaxSize()
+                    .safeDrawingPadding()
+                    .onGloballyPositioned { paddedRect = it.boundsInWindow().toDpRect(density) }
+                )
+            }
+        }.apply {
+            modalPresentationStyle = UIModalPresentationPageSheet
+        }
+
+        var presented = false
+        rootViewController.presentViewController(sheetViewController, animated = false) {
+            presented = true
+        }
+
+        waitUntil("sheet should be presented") { presented }
+        waitForIdle()
+
+        // The sheet sits below the status bar, so the screen behind it must not add its insets.
+        val sheetTopSafeAreaInsetsDp = CMPLayoutRegion
+            .safeAreaWithCornerAdaptation(CMPLayoutRegionAdaptivityAxisVertical)
+            .edgeInsetsInView(sheetViewController.view)
+            .useContents { top }.dp
+
+        assertEquals(contentRect.top + sheetTopSafeAreaInsetsDp, paddedRect.top)
     }
 }
 

@@ -133,6 +133,7 @@ import platform.UIKit.UIEvent
 import platform.UIKit.UIEventButtonMaskPrimary
 import platform.UIKit.UIEventButtonMaskSecondary
 import platform.UIKit.UIPress
+import platform.UIKit.UIResponder
 import platform.UIKit.UITouch
 import platform.UIKit.UITouchPhase
 import platform.UIKit.UITouchTypeDirect
@@ -140,6 +141,7 @@ import platform.UIKit.UITouchTypeIndirect
 import platform.UIKit.UITouchTypeIndirectPointer
 import platform.UIKit.UITouchTypePencil
 import platform.UIKit.UIView
+import platform.UIKit.UIViewController
 
 /**
  * iOS specific-implementation of [PlatformContext.SemanticsOwnerListener] used to track changes in [SemanticsOwner].
@@ -405,7 +407,7 @@ internal class ComposeSceneMediator(
     private val windowInsetsManager = WindowInsetsManager(
         windowInsetsViews = listOf(
             { _overlayView },
-            { windowContext.window?.rootViewController?.view },
+            { _overlayView.presentationRootView },
         ),
         interfaceOrientation = interfaceOrientationState
     )
@@ -1106,4 +1108,19 @@ private val UITouch.isPressed
 private fun UITouch.offsetInView(view: UIView, density: Float): Offset =
     locationInView(view).useContents {
         Offset(x.toFloat() * density, y.toFloat() * density)
+    }
+
+/**
+ * The view of the outermost view controller that contains this view: the window's root view
+ * controller, or a presented view controller such as a sheet. A presented view controller has no
+ * parent, so content in a sheet does not get the insets of the screen behind it.
+ */
+private val UIView.presentationRootView: UIView?
+    get() {
+        val viewController = generateSequence<UIResponder>(this) { it.nextResponder }
+            .filterIsInstance<UIViewController>()
+            .firstOrNull()
+            ?: return null
+        val outermostViewController = generateSequence(viewController) { it.parentViewController }.last()
+        return outermostViewController.view
     }
